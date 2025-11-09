@@ -105,23 +105,23 @@ public class GhidraGPTConsole extends JPanel {
     }
     
     private JPanel createToolbar() {
-        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 2));
         toolbar.setBackground(new Color(32, 32, 32));
-        toolbar.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+        toolbar.setBorder(BorderFactory.createEmptyBorder(2, 10, 2, 10));
         
         // Style buttons with modern flat design
         JButton clearButton = createStyledButton("🗑️ Clear", new Color(255, 92, 87));
-        clearButton.setPreferredSize(new Dimension(85, 28));
+        clearButton.setPreferredSize(new Dimension(85, 24));
         clearButton.addActionListener(e -> clearConsole());
         
         JButton copyButton = createStyledButton("📋 Copy", new Color(102, 217, 239));
-        copyButton.setPreferredSize(new Dimension(85, 28));
+        copyButton.setPreferredSize(new Dimension(85, 24));
         copyButton.addActionListener(e -> copyToClipboard());
         
         // Add a title label
         JLabel titleLabel = new JLabel("🤖 GhidraGPT Console");
         titleLabel.setForeground(new Color(198, 120, 221));
-        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 13f));
+        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 12f));
         
         toolbar.add(titleLabel);
         toolbar.add(Box.createHorizontalStrut(20));

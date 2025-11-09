@@ -5,6 +5,7 @@ import ghidragpt.config.ConfigurationManager;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 /**
@@ -16,7 +17,10 @@ public class ConfigurationPanel extends JPanel {
     private final ConfigurationManager configManager;
     private final JTextField apiKeyField;
     private final JComboBox<GPTService.GPTProvider> providerCombo;
-    private final JTextField modelField;
+    private final JComboBox<String> modelCombo;
+    private final JButton fetchModelsButton;
+    private final JTextField customApiUrlField;
+    private final JLabel customApiUrlLabel;
     private final JSpinner maxTokensSpinner;
     private final JSpinner temperatureSpinner;
     private final JSpinner timeoutSpinner;
@@ -53,12 +57,36 @@ public class ConfigurationPanel extends JPanel {
         gbc.gridx = 0; gbc.gridy = 2; gbc.fill = GridBagConstraints.NONE;
         add(new JLabel("Model:"), gbc);
         
-        modelField = new JTextField("gpt-4", 30);
+        // Create a panel to hold model combo and fetch button
+        JPanel modelPanel = new JPanel(new BorderLayout(5, 0));
+        modelCombo = new JComboBox<>();
+        modelCombo.setEditable(true);
+        modelCombo.setPreferredSize(new Dimension(200, 25));
+        modelPanel.add(modelCombo, BorderLayout.CENTER);
+        
+        fetchModelsButton = new JButton("Fetch");
+        fetchModelsButton.setPreferredSize(new Dimension(70, 25));
+        fetchModelsButton.addActionListener(e -> fetchModels());
+        modelPanel.add(fetchModelsButton, BorderLayout.EAST);
+        
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL;
-        add(modelField, gbc);
+        add(modelPanel, gbc);
+        
+        // Custom API URL (for OpenAI Compatible provider)
+        gbc.gridx = 0; gbc.gridy = 3; gbc.fill = GridBagConstraints.NONE;
+        customApiUrlLabel = new JLabel("Custom API URL:");
+        add(customApiUrlLabel, gbc);
+        
+        customApiUrlField = new JTextField("http://localhost:8000/v1", 30);
+        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL;
+        add(customApiUrlField, gbc);
+        
+        // Hide by default (only show for OPENAI_COMPATIBLE provider)
+        customApiUrlLabel.setVisible(false);
+        customApiUrlField.setVisible(false);
         
         // Max Tokens
-        gbc.gridx = 0; gbc.gridy = 3; gbc.fill = GridBagConstraints.NONE;
+        gbc.gridx = 0; gbc.gridy = 4; gbc.fill = GridBagConstraints.NONE;
         add(new JLabel("Max Tokens:"), gbc);
         
         maxTokensSpinner = new JSpinner(new SpinnerNumberModel(GPTService.DEFAULT_MAX_TOKENS, 100, 32000, 100));
@@ -66,7 +94,7 @@ public class ConfigurationPanel extends JPanel {
         add(maxTokensSpinner, gbc);
         
         // Temperature
-        gbc.gridx = 0; gbc.gridy = 4; gbc.fill = GridBagConstraints.NONE;
+        gbc.gridx = 0; gbc.gridy = 5; gbc.fill = GridBagConstraints.NONE;
         add(new JLabel("Temperature:"), gbc);
         
         temperatureSpinner = new JSpinner(new SpinnerNumberModel(GPTService.DEFAULT_TEMPERATURE, 0.0, 2.0, 0.1));
@@ -74,7 +102,7 @@ public class ConfigurationPanel extends JPanel {
         add(temperatureSpinner, gbc);
         
         // Timeout
-        gbc.gridx = 0; gbc.gridy = 5; gbc.fill = GridBagConstraints.NONE;
+        gbc.gridx = 0; gbc.gridy = 6; gbc.fill = GridBagConstraints.NONE;
         add(new JLabel("Timeout (seconds):"), gbc);
         
         timeoutSpinner = new JSpinner(new SpinnerNumberModel(GPTService.DEFAULT_TIMEOUT_SECONDS, 5, 300, 5));
@@ -95,26 +123,27 @@ public class ConfigurationPanel extends JPanel {
         buttonPanel.add(saveButton);
         
         // Add centered button panel
-        gbc.gridx = 0; gbc.gridy = 6; gbc.gridwidth = 2;
-        gbc.fill = GridBagConstraints.NONE;
+        gbc.gridx = 0; gbc.gridy = 7; gbc.gridwidth = 2;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.anchor = GridBagConstraints.CENTER;
-        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.insets = new Insets(10, 5, 5, 5);
+        gbc.weighty = 0.0;
         add(buttonPanel, gbc);
         
         // Status label
         statusLabel = new JLabel("Not configured");
         statusLabel.setForeground(Color.RED);
-        gbc.gridx = 0; gbc.gridy = 7; gbc.gridwidth = 2;
-        gbc.fill = GridBagConstraints.NONE;
+        gbc.gridx = 0; gbc.gridy = 8; gbc.gridwidth = 2;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.anchor = GridBagConstraints.CENTER;
-        gbc.insets = new Insets(5, 5, 5, 5); // Reset margins
-        gbc.weighty = 0.0; // No vertical expansion for status
+        gbc.insets = new Insets(5, 5, 10, 5);
+        gbc.weighty = 0.0;
         add(statusLabel, gbc);
         
         // Vertical spacer to push everything to the top when panel height increases
         JPanel spacer = new JPanel();
         spacer.setOpaque(false);
-        gbc.gridx = 0; gbc.gridy = 8; gbc.gridwidth = 2;
+        gbc.gridx = 0; gbc.gridy = 9; gbc.gridwidth = 2;
         gbc.fill = GridBagConstraints.BOTH;
         gbc.weighty = 1.0; // Take up all extra vertical space
         gbc.weightx = 1.0; // Take up all extra horizontal space
@@ -133,10 +162,17 @@ public class ConfigurationPanel extends JPanel {
         // Load saved values
         providerCombo.setSelectedItem(configManager.getProvider());
         apiKeyField.setText(configManager.getApiKey());
-        modelField.setText(configManager.getModel());
+        modelCombo.setSelectedItem(configManager.getModel());
+        customApiUrlField.setText(configManager.getCustomApiUrl());
         maxTokensSpinner.setValue(configManager.getMaxTokens());
         temperatureSpinner.setValue(configManager.getTemperature());
         timeoutSpinner.setValue(configManager.getTimeoutSeconds());
+        
+        // Update visibility of custom URL field
+        GPTService.GPTProvider provider = configManager.getProvider();
+        boolean isOpenAICompatible = (provider == GPTService.GPTProvider.OPENAI_COMPATIBLE);
+        customApiUrlLabel.setVisible(isOpenAICompatible);
+        customApiUrlField.setVisible(isOpenAICompatible);
         
         // Update status
         if (configManager.isConfigured()) {
@@ -147,6 +183,7 @@ public class ConfigurationPanel extends JPanel {
             gptService.setApiKey(configManager.getApiKey());
             gptService.setProvider(configManager.getProvider());
             gptService.setModel(configManager.getModel());
+            gptService.setCustomApiUrl(configManager.getCustomApiUrl());
             gptService.setMaxTokens(configManager.getMaxTokens());
             gptService.setTemperature(configManager.getTemperature());
             gptService.setTimeoutSeconds(configManager.getTimeoutSeconds());
@@ -162,32 +199,31 @@ public class ConfigurationPanel extends JPanel {
         // Reset all configuration fields when provider changes
         resetConfigurationFields();
         
+        // Show/hide custom API URL field based on provider
+        boolean isOpenAICompatible = (provider == GPTService.GPTProvider.OPENAI_COMPATIBLE);
+        customApiUrlLabel.setVisible(isOpenAICompatible);
+        customApiUrlField.setVisible(isOpenAICompatible);
+        
+        // Clear and set placeholder
+        modelCombo.removeAllItems();
+        modelCombo.addItem("<model>");
+        modelCombo.setSelectedItem("<model>");
+        
         // Set provider-specific defaults
         if (provider == GPTService.GPTProvider.OLLAMA) {
-            modelField.setText("llama3.2");
             apiKeyField.setEnabled(false);  // Ollama doesn't require API key
             apiKeyField.setText("Not required for Ollama (local)");
+        } else if (provider == GPTService.GPTProvider.OPENAI_COMPATIBLE) {
+            apiKeyField.setEnabled(true);
+            if (apiKeyField.getText().equals("Not required for Ollama (local)")) {
+                apiKeyField.setText("");
+            }
+            customApiUrlField.setText("http://localhost:8000/v1");
         } else {
             // For all other providers, enable API key field and clear placeholder
             apiKeyField.setEnabled(true);
             if (apiKeyField.getText().equals("Not required for Ollama (local)")) {
                 apiKeyField.setText("");
-            }
-            
-            if (provider == GPTService.GPTProvider.OPENAI) {
-                modelField.setText("gpt-4o");
-            } else if (provider == GPTService.GPTProvider.ANTHROPIC) {
-                modelField.setText("claude-sonnet-4-20250514");
-            } else if (provider == GPTService.GPTProvider.GEMINI) {
-                modelField.setText("gemini-2.5-flash");
-            } else if (provider == GPTService.GPTProvider.COHERE) {
-                modelField.setText("command");
-            } else if (provider == GPTService.GPTProvider.MISTRAL) {
-                modelField.setText("mistral-large-latest");
-            } else if (provider == GPTService.GPTProvider.DEEPSEEK) {
-                modelField.setText("deepseek-chat");
-            } else if (provider == GPTService.GPTProvider.GROK) {
-                modelField.setText("grok-3");
             }
         }
         
@@ -209,10 +245,17 @@ public class ConfigurationPanel extends JPanel {
     }    private void saveConfiguration() {
         String apiKey = apiKeyField.getText().trim();
         GPTService.GPTProvider selectedProvider = (GPTService.GPTProvider) providerCombo.getSelectedItem();
+        String customApiUrl = customApiUrlField.getText().trim();
         
         // All providers require API key except Ollama
         if (selectedProvider != GPTService.GPTProvider.OLLAMA && apiKey.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Please enter an API key", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        
+        // OpenAI Compatible requires custom URL
+        if (selectedProvider == GPTService.GPTProvider.OPENAI_COMPATIBLE && customApiUrl.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Please enter a custom API URL", "Error", JOptionPane.ERROR_MESSAGE);
             return;
         }
         
@@ -224,7 +267,8 @@ public class ConfigurationPanel extends JPanel {
         // Save to configuration manager
         configManager.setApiKey(apiKey);
         configManager.setProvider(selectedProvider);
-        configManager.setModel(modelField.getText().trim());
+        configManager.setModel(getSelectedModel());
+        configManager.setCustomApiUrl(customApiUrl);
         configManager.setMaxTokens((Integer) maxTokensSpinner.getValue());
         configManager.setTemperature((Double) temperatureSpinner.getValue());
         configManager.setTimeoutSeconds((Integer) timeoutSpinner.getValue());
@@ -233,7 +277,8 @@ public class ConfigurationPanel extends JPanel {
         // Apply to GPT service
         gptService.setApiKey(apiKey);
         gptService.setProvider(selectedProvider);
-        gptService.setModel(modelField.getText().trim());
+        gptService.setModel(getSelectedModel());
+        gptService.setCustomApiUrl(customApiUrl);
         gptService.setMaxTokens((Integer) maxTokensSpinner.getValue());
         gptService.setTemperature((Double) temperatureSpinner.getValue());
         gptService.setTimeoutSeconds((Integer) timeoutSpinner.getValue());
@@ -250,10 +295,11 @@ public class ConfigurationPanel extends JPanel {
         // First update the GPTService with current UI values
         String apiKey = apiKeyField.getText().trim();
         GPTService.GPTProvider selectedProvider = (GPTService.GPTProvider) providerCombo.getSelectedItem();
-        String model = modelField.getText().trim();
+        String model = getSelectedModel();
+        String customApiUrl = customApiUrlField.getText().trim();
         
         // Validate inputs before testing
-        if (apiKey.isEmpty()) {
+        if (selectedProvider != GPTService.GPTProvider.OLLAMA && apiKey.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Please enter an API key", "Error", JOptionPane.ERROR_MESSAGE);
             return;
         }
@@ -263,10 +309,16 @@ public class ConfigurationPanel extends JPanel {
             return;
         }
         
+        if (selectedProvider == GPTService.GPTProvider.OPENAI_COMPATIBLE && customApiUrl.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Please enter a custom API URL", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        
         // Apply current UI values to GPTService for testing
         gptService.setApiKey(apiKey);
         gptService.setProvider(selectedProvider);
         gptService.setModel(model);
+        gptService.setCustomApiUrl(customApiUrl);
 
         testButton.setEnabled(false);
         testButton.setText("Testing...");
@@ -315,6 +367,89 @@ public class ConfigurationPanel extends JPanel {
         };
         
         worker.execute();
+    }
+    
+    private void fetchModels() {
+        fetchModelsButton.setEnabled(false);
+        fetchModelsButton.setText("Fetching...");
+        
+        // Get current provider settings
+        GPTService.GPTProvider selectedProvider = (GPTService.GPTProvider) providerCombo.getSelectedItem();
+        String apiKey = apiKeyField.getText().trim();
+        String customApiUrl = customApiUrlField.getText().trim();
+        
+        // Validate inputs before fetching
+        if (selectedProvider != GPTService.GPTProvider.OLLAMA && apiKey.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Please enter an API key first", "Error", JOptionPane.ERROR_MESSAGE);
+            fetchModelsButton.setEnabled(true);
+            fetchModelsButton.setText("Fetch");
+            return;
+        }
+        
+        if (selectedProvider == GPTService.GPTProvider.OPENAI_COMPATIBLE && customApiUrl.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Please enter a custom API URL first", "Error", JOptionPane.ERROR_MESSAGE);
+            fetchModelsButton.setEnabled(true);
+            fetchModelsButton.setText("Fetch");
+            return;
+        }
+        
+        // Apply current settings to GPT service for fetching
+        gptService.setApiKey(apiKey);
+        gptService.setProvider(selectedProvider);
+        gptService.setCustomApiUrl(customApiUrl);
+        
+        // Fetch in background thread
+        SwingWorker<List<String>, Void> worker = new SwingWorker<List<String>, Void>() {
+            @Override
+            protected List<String> doInBackground() throws Exception {
+                return gptService.fetchAvailableModels();
+            }
+            
+            @Override
+            protected void done() {
+                try {
+                    List<String> models = get();
+                    if (models.isEmpty()) {
+                        JOptionPane.showMessageDialog(ConfigurationPanel.this, 
+                            "No models available or provider doesn't support model listing", 
+                            "Info", JOptionPane.INFORMATION_MESSAGE);
+                    } else {
+                        // Save current selection
+                        String currentModel = getSelectedModel();
+                        
+                        // Update combo box with fetched models
+                        modelCombo.removeAllItems();
+                        for (String model : models) {
+                            modelCombo.addItem(model);
+                        }
+                        
+                        // Try to restore previous selection if it exists in the list
+                        if (currentModel != null && !currentModel.isEmpty()) {
+                            modelCombo.setSelectedItem(currentModel);
+                        } else if (!models.isEmpty()) {
+                            modelCombo.setSelectedIndex(0);
+                        }
+                        
+                        statusLabel.setText("Fetched " + models.size() + " models");
+                        statusLabel.setForeground(Color.BLUE);
+                    }
+                } catch (Exception e) {
+                    JOptionPane.showMessageDialog(ConfigurationPanel.this, 
+                        "Failed to fetch models:\n" + e.getMessage(), 
+                        "Error", JOptionPane.ERROR_MESSAGE);
+                } finally {
+                    fetchModelsButton.setEnabled(true);
+                    fetchModelsButton.setText("Fetch");
+                }
+            }
+        };
+        
+        worker.execute();
+    }
+    
+    private String getSelectedModel() {
+        Object selected = modelCombo.getSelectedItem();
+        return selected != null ? selected.toString().trim() : "";
     }
     
     public boolean isConfigured() {

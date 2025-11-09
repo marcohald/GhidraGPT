@@ -21,6 +21,7 @@ public class ConfigurationManager {
     private static final String MAX_TOKENS_PROPERTY = "api.max.tokens";
     private static final String TEMPERATURE_PROPERTY = "api.temperature";
     private static final String TIMEOUT_PROPERTY = "api.timeout.seconds";
+    private static final String CUSTOM_API_URL_PROPERTY = "api.custom.url";
     
     // XOR key for API key obfuscation, not super secure but still better than plaintext
     private static final String XOR_KEY = "GhidraGPT_Sec3@Key_9f4e7a2b#8c1d6f0a@2025!";
@@ -183,6 +184,10 @@ public class ConfigurationManager {
         // Ollama doesn't require API key, all others do
         if (provider == GPTService.GPTProvider.OLLAMA) {
             return !model.trim().isEmpty();
+        } else if (provider == GPTService.GPTProvider.OPENAI_COMPATIBLE) {
+            // OpenAI Compatible requires API key, model, and custom URL
+            String customUrl = getCustomApiUrl();
+            return !apiKey.trim().isEmpty() && !model.trim().isEmpty() && !customUrl.trim().isEmpty();
         } else {
             return !apiKey.trim().isEmpty() && !model.trim().isEmpty();
         }
@@ -212,6 +217,20 @@ public class ConfigurationManager {
      */
     public void setTimeoutSeconds(int timeoutSeconds) {
         properties.setProperty(TIMEOUT_PROPERTY, String.valueOf(timeoutSeconds));
+    }
+    
+    /**
+     * Gets the custom API URL
+     */
+    public String getCustomApiUrl() {
+        return properties.getProperty(CUSTOM_API_URL_PROPERTY, "");
+    }
+    
+    /**
+     * Sets the custom API URL
+     */
+    public void setCustomApiUrl(String customApiUrl) {
+        properties.setProperty(CUSTOM_API_URL_PROPERTY, customApiUrl != null ? customApiUrl : "");
     }
     
     /**

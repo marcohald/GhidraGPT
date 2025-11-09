@@ -38,6 +38,7 @@ public class GPTService {
     private String apiKey;
     private GPTProvider provider = GPTProvider.GROK;
     private String model = "grok-3"; // Default model
+    private String customApiUrl = ""; // For OPENAI_COMPATIBLE provider
     
     // Configurable parameters
     private int maxTokens = DEFAULT_MAX_TOKENS;
@@ -45,7 +46,7 @@ public class GPTService {
     private int timeoutSeconds = DEFAULT_TIMEOUT_SECONDS;
     
     public enum GPTProvider {
-        OPENAI, ANTHROPIC, GEMINI, COHERE, MISTRAL, DEEPSEEK, GROK, OLLAMA
+        OPENAI, ANTHROPIC, GEMINI, COHERE, MISTRAL, DEEPSEEK, GROK, OLLAMA, OPENAI_COMPATIBLE
     }
     
     public GPTService() {
@@ -88,6 +89,10 @@ public class GPTService {
         rebuildHttpClient();
     }
     
+    public void setCustomApiUrl(String customApiUrl) {
+        this.customApiUrl = customApiUrl != null ? customApiUrl : "";
+    }
+    
     private void rebuildHttpClient() {
         // Create new HTTP client with updated timeout
         this.httpClient = new OkHttpClient.Builder()
@@ -122,6 +127,10 @@ public class GPTService {
         return timeoutSeconds;
     }
     
+    public String getCustomApiUrl() {
+        return customApiUrl;
+    }
+    
     /**
      * Send a request to the configured GPT API (with streaming enabled by default)
      */
@@ -154,6 +163,11 @@ public class GPTService {
             throw new IllegalStateException("API key not configured");
         }
         
+        // OpenAI Compatible requires custom URL
+        if (provider == GPTProvider.OPENAI_COMPATIBLE && (customApiUrl == null || customApiUrl.trim().isEmpty())) {
+            throw new IllegalStateException("Custom API URL not configured for OpenAI Compatible provider");
+        }
+        
         // All providers now support native streaming
         switch (provider) {
             case OPENAI:
@@ -172,6 +186,8 @@ public class GPTService {
                 return sendGrokStreamingRequest(prompt, callback);
             case OLLAMA:
                 return sendOllamaStreamingRequest(prompt, callback);
+            case OPENAI_COMPATIBLE:
+                return sendOpenAICompatibleStreamingRequest(prompt, callback);
             default:
                 throw new IllegalStateException("Unsupported provider: " + provider);
         }
@@ -583,6 +599,32 @@ public class GPTService {
         return processOpenAICompatibleStream(httpRequest, callback);
     }
     
+    private String sendOpenAICompatibleStreamingRequest(String prompt, StreamCallback callback) throws IOException {
+        // OpenAI Compatible API request - uses custom URL with OpenAI-compatible format
+        OpenAIRequest request = new OpenAIRequest();
+        request.model = model.isEmpty() ? "gpt-4" : model;
+        request.messages = List.of(new OpenAIMessage("user", prompt));
+        request.maxTokens = maxTokens;
+        request.temperature = temperature;
+        request.stream = true;
+        
+        String jsonRequest = objectMapper.writeValueAsString(request);
+        
+        // Ensure the URL ends with /chat/completions if not already present
+        String apiUrl = customApiUrl;
+        if (!apiUrl.endsWith("/chat/completions")) {
+            if (!apiUrl.endsWith("/")) {
+                apiUrl += "/";
+            }
+            apiUrl += "chat/completions";
+        }
+        
+        Request httpRequest = StreamingUtils.buildStreamingRequest(
+            apiUrl, jsonRequest, "Authorization", "Bearer " + apiKey);
+        
+        return processOpenAICompatibleStream(httpRequest, callback);
+    }
+    
     private String sendOllamaStreamingRequest(String prompt, StreamCallback callback) throws IOException {
         // Ollama native streaming API request with separate system prompt
         OllamaRequest request = new OllamaRequest();
@@ -902,6 +944,175 @@ public class GPTService {
         return processCohereStream(httpRequest, callback);
     }
     
+    /**
+     * Fetches available models from the API provider
+     * @return List of model IDs, or empty list if not supported/failed
+     */
+    public List<String> fetchAvailableModels() {
+        try {
+            switch (provider) {
+                case OPENAI:
+                    return fetchOpenAIModels();
+                case OLLAMA:
+                    return fetchOllamaModels();
+                case OPENAI_COMPATIBLE:
+                    return fetchOpenAICompatibleModels();
+                case MISTRAL:
+                    return fetchMistralModels();
+                case DEEPSEEK:
+                    return fetchDeepSeekModels();
+                case GEMINI:
+                    return fetchGeminiModels();
+                default:
+                    // Providers without models API: return empty list
+                    return List.of();
+            }
+        } catch (Exception e) {
+            Msg.error(this, "Failed to fetch models: " + e.getMessage());
+            return List.of();
+        }
+    }
+    
+    private List<String> fetchOpenAIModels() throws IOException {
+        Request request = new Request.Builder()
+                .url("https://api.openai.com/v1/models")
+                .header("Authorization", "Bearer " + apiKey)
+                .get()
+                .build();
+        
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                throw new IOException("Failed to fetch models: " + response.code());
+            }
+            
+            String responseBody = response.body().string();
+            ModelsListResponse modelsResponse = objectMapper.readValue(responseBody, ModelsListResponse.class);
+            
+            return modelsResponse.data.stream()
+                    .map(model -> model.id)
+                    .filter(id -> id.startsWith("gpt-"))
+                    .sorted()
+                    .toList();
+        }
+    }
+    
+    private List<String> fetchOllamaModels() throws IOException {
+        Request request = new Request.Builder()
+                .url("http://localhost:11434/api/tags")
+                .get()
+                .build();
+        
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                throw new IOException("Failed to fetch Ollama models: " + response.code());
+            }
+            
+            String responseBody = response.body().string();
+            OllamaModelsResponse modelsResponse = objectMapper.readValue(responseBody, OllamaModelsResponse.class);
+            
+            return modelsResponse.models.stream()
+                    .map(model -> model.name)
+                    .sorted()
+                    .toList();
+        }
+    }
+    
+    private List<String> fetchOpenAICompatibleModels() throws IOException {
+        String baseUrl = customApiUrl;
+        if (baseUrl.endsWith("/chat/completions")) {
+            baseUrl = baseUrl.substring(0, baseUrl.length() - "/chat/completions".length());
+        }
+        if (!baseUrl.endsWith("/")) {
+            baseUrl += "/";
+        }
+        
+        Request request = new Request.Builder()
+                .url(baseUrl + "models")
+                .header("Authorization", "Bearer " + apiKey)
+                .get()
+                .build();
+        
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                throw new IOException("Failed to fetch models: " + response.code());
+            }
+            
+            String responseBody = response.body().string();
+            ModelsListResponse modelsResponse = objectMapper.readValue(responseBody, ModelsListResponse.class);
+            
+            return modelsResponse.data.stream()
+                    .map(model -> model.id)
+                    .sorted()
+                    .toList();
+        }
+    }
+    
+    private List<String> fetchMistralModels() throws IOException {
+        Request request = new Request.Builder()
+                .url("https://api.mistral.ai/v1/models")
+                .header("Authorization", "Bearer " + apiKey)
+                .get()
+                .build();
+        
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                throw new IOException("Failed to fetch Mistral models: " + response.code());
+            }
+            
+            String responseBody = response.body().string();
+            ModelsListResponse modelsResponse = objectMapper.readValue(responseBody, ModelsListResponse.class);
+            
+            return modelsResponse.data.stream()
+                    .map(model -> model.id)
+                    .sorted()
+                    .toList();
+        }
+    }
+    
+    private List<String> fetchDeepSeekModels() throws IOException {
+        Request request = new Request.Builder()
+                .url("https://api.deepseek.com/v1/models")
+                .header("Authorization", "Bearer " + apiKey)
+                .get()
+                .build();
+        
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                throw new IOException("Failed to fetch DeepSeek models: " + response.code());
+            }
+            
+            String responseBody = response.body().string();
+            ModelsListResponse modelsResponse = objectMapper.readValue(responseBody, ModelsListResponse.class);
+            
+            return modelsResponse.data.stream()
+                    .map(model -> model.id)
+                    .sorted()
+                    .toList();
+        }
+    }
+    
+    private List<String> fetchGeminiModels() throws IOException {
+        Request request = new Request.Builder()
+                .url("https://generativelanguage.googleapis.com/v1beta/models?key=" + apiKey)
+                .get()
+                .build();
+        
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                throw new IOException("Failed to fetch Gemini models: " + response.code());
+            }
+            
+            String responseBody = response.body().string();
+            GeminiModelsResponse modelsResponse = objectMapper.readValue(responseBody, GeminiModelsResponse.class);
+            
+            return modelsResponse.models.stream()
+                    .map(model -> model.name.replaceFirst("models/", ""))
+                    .filter(name -> name.startsWith("gemini-"))
+                    .sorted()
+                    .toList();
+        }
+    }
+    
     // OpenAI API DTOs
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class OpenAIRequest {
@@ -1164,6 +1375,39 @@ public class GPTService {
         public String model;
         public OllamaMessage message;
         public Boolean done;
+    }
+    
+    // Models List API DTOs
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class ModelsListResponse {
+        public List<ModelInfo> data;
+    }
+    
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class ModelInfo {
+        public String id;
+        public String name;
+    }
+    
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class OllamaModelsResponse {
+        public List<OllamaModelInfo> models;
+    }
+    
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class OllamaModelInfo {
+        public String name;
+        public String model;
+    }
+    
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class GeminiModelsResponse {
+        public List<GeminiModelInfo> models;
+    }
+    
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class GeminiModelInfo {
+        public String name;
     }
     
 }

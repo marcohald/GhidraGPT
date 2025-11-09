@@ -1,4 +1,2 @@
-Module-Name: GhidraGPT
-Module-Description: GPT-powered code analysis and enhancement plugin for Ghidra
-Module-Version: 1.0.0
-Module-Dependencies: Decompiler,Base,SoftwareModeling
+GHIDRA_MODULE_NAME=GhidraGPT
+GHIDRA_MODULE_DESC=LLM Powered Reverse Engineering

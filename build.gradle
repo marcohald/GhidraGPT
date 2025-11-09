@@ -2,18 +2,20 @@ plugins {
     id 'java'
 }
 
+def GHIDRA_INSTALL_DIR = System.getenv('GHIDRA_INSTALL_DIR') ?: '/snap/ghidra/current/ghidra_11.4_PUBLIC/'
+
 repositories {
     mavenCentral()
     flatDir {
-        dirs "/usr/share/ghidra/Ghidra/Framework/Generic/lib"
-        dirs "/usr/share/ghidra/Ghidra/Framework/SoftwareModeling/lib"
-        dirs "/usr/share/ghidra/Ghidra/Framework/Utility/lib"
-        dirs "/usr/share/ghidra/Ghidra/Framework/Docking/lib"
-        dirs "/usr/share/ghidra/Ghidra/Framework/Project/lib"
-        dirs "/usr/share/ghidra/Ghidra/Framework/Gui/lib"
-        dirs "/usr/share/ghidra/Ghidra/Framework/Help/lib"
-        dirs "/usr/share/ghidra/Ghidra/Features/Decompiler/lib"
-        dirs "/usr/share/ghidra/Ghidra/Features/Base/lib"
+        dirs "$GHIDRA_INSTALL_DIR/Ghidra/Framework/Generic/lib"
+        dirs "$GHIDRA_INSTALL_DIR/Ghidra/Framework/SoftwareModeling/lib"
+        dirs "$GHIDRA_INSTALL_DIR/Ghidra/Framework/Utility/lib"
+        dirs "$GHIDRA_INSTALL_DIR/Ghidra/Framework/Docking/lib"
+        dirs "$GHIDRA_INSTALL_DIR/Ghidra/Framework/Project/lib"
+        dirs "$GHIDRA_INSTALL_DIR/Ghidra/Framework/Gui/lib"
+        dirs "$GHIDRA_INSTALL_DIR/Ghidra/Framework/Help/lib"
+        dirs "$GHIDRA_INSTALL_DIR/Ghidra/Features/Decompiler/lib"
+        dirs "$GHIDRA_INSTALL_DIR/Ghidra/Features/Base/lib"
     }
 }
 
