@@ -29,7 +29,7 @@ import java.awt.event.ActionListener;
 /**
  * Main UI provider for the GhidraGPT plugin
  */
-public class GhidraGPTProvider extends ComponentProvider {
+public class Provider extends ComponentProvider {
     
     private final GhidraGPT plugin;
     private final JPanel mainPanel;
@@ -39,7 +39,7 @@ public class GhidraGPTProvider extends ComponentProvider {
     private CodeAnalysis analysisService;
     private Program currentProgram;
     
-    public GhidraGPTProvider(GhidraGPT plugin, String name) {
+    public Provider(GhidraGPT plugin, String name) {
         super(plugin.getTool(), name, name);
         this.plugin = plugin;
         

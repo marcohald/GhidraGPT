@@ -29,7 +29,7 @@ import ghidra.program.model.pcode.HighFunctionDBUtil;
 import ghidra.program.model.listing.Parameter;
 import ghidra.program.model.listing.Variable;
 import ghidra.program.model.listing.VariableStorage;
-import ghidragpt.ui.GhidraGPTConsole;
+import ghidragpt.ui.Console;
 import ghidragpt.service.APIClient;
 import ghidragpt.utils.PromptBuilder;
 import ghidragpt.utils.ResponseParser;
@@ -57,13 +57,13 @@ public class FunctionRewrite {
     
     private final DecompInterface decompiler;
     private final APIClient apiClient;
-    private final GhidraGPTConsole console;
+    private final Console console;
     private final PromptBuilder promptBuilder;
     private final ResponseParser responseParser;
     private final ObjectMapper objectMapper;
     private GhidraFunctionModifier functionModifier;
     
-    public FunctionRewrite(APIClient apiClient, GhidraGPTConsole console) {
+    public FunctionRewrite(APIClient apiClient, Console console) {
         this.apiClient = apiClient;
         this.console = console;
         this.decompiler = new DecompInterface();

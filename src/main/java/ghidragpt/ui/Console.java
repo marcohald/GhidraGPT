@@ -11,7 +11,7 @@ import java.util.Date;
 /**
  * Dedicated console for GhidraGPT output
  */
-public class GhidraGPTConsole extends JPanel {
+public class Console extends JPanel {
     
     private final JTextPane textPane;
     private final StyledDocument document;
@@ -24,7 +24,7 @@ public class GhidraGPTConsole extends JPanel {
     private Style resultStyle;
     private Style errorStyle;
     
-    public GhidraGPTConsole() {
+    public Console() {
         setLayout(new BorderLayout());
         
         // Initialize components with enhanced styling

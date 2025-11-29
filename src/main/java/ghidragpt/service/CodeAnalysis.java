@@ -12,7 +12,7 @@ import ghidra.program.model.symbol.Symbol;
 import ghidra.program.model.symbol.SymbolTable;
 import ghidra.util.Msg;
 import ghidra.util.task.TaskMonitor;
-import ghidragpt.ui.GhidraGPTConsole;
+import ghidragpt.ui.Console;
 
 import java.io.IOException;
 import java.util.Iterator;
@@ -25,9 +25,9 @@ public class CodeAnalysis {
     private final APIClient apiClient;
     private final DecompInterface decompiler;
     private final FunctionRewrite functionRewriteService;
-    private final GhidraGPTConsole console;
+    private final Console console;
     
-    public CodeAnalysis(APIClient apiClient, GhidraGPTConsole console) {
+    public CodeAnalysis(APIClient apiClient, Console console) {
         this.apiClient = apiClient;
         this.console = console;
         this.decompiler = new DecompInterface();

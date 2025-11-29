@@ -7,7 +7,7 @@ import ghidra.framework.plugintool.PluginTool;
 import ghidra.framework.plugintool.util.PluginStatus;
 import ghidra.program.model.listing.Program;
 import ghidra.util.Msg;
-import ghidragpt.ui.GhidraGPTProvider;
+import ghidragpt.ui.Provider;
 import ghidragpt.service.APIClient;
 import ghidragpt.config.ConfigurationManager;
 
@@ -25,14 +25,14 @@ import javax.swing.*;
     description = "Integrates GPT models (OpenAI GPT, Anthropic Claude, etc.) into Ghidra for " +
                   "automated code analysis, variable renaming, vulnerability detection, and explanation generation."
 )
-public class GhidraGPTPlugin extends ProgramPlugin {
+public class GhidraGPT extends ProgramPlugin {
     
-    private GhidraGPTProvider provider;
+    private Provider provider;
     private APIClient apiClient;
     private ConfigurationManager configManager;
     private boolean configurationChecked = false;
     
-    public GhidraGPTPlugin(PluginTool tool) {
+    public GhidraGPT(PluginTool tool) {
         super(tool);
         apiClient = new APIClient();
         configManager = new ConfigurationManager();
@@ -41,7 +41,7 @@ public class GhidraGPTPlugin extends ProgramPlugin {
     @Override
     protected void init() {
         super.init();
-        provider = new GhidraGPTProvider(this, getName());
+        provider = new Provider(this, getName());
         
         // Check configuration on startup
         checkAndShowConfigurationIfNeeded();

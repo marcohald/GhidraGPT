@@ -18,7 +18,7 @@ import java.util.ArrayList;
 /**
  * Utility class for applying GPT suggestions to Ghidra programs
  */
-public class GPTSuggestionApplier {
+public class SuggestionApplier {
     
     private static final Pattern VARIABLE_SUGGESTION_PATTERN = 
         Pattern.compile("([a-zA-Z_][a-zA-Z0-9_]*) -> ([a-zA-Z_][a-zA-Z0-9_]*):?(.*)");
