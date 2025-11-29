@@ -2,8 +2,7 @@ package ghidragpt.service;
 
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Program;
-import ghidra.program.model.listing.Variable;
-import ghidra.program.model.listing.Parameter;
+import ghidra.program.model.listing.CodeUnit;
 import ghidra.program.model.symbol.Symbol;
 import ghidra.program.model.symbol.SymbolTable;
 import ghidra.program.model.pcode.HighFunction;
@@ -14,11 +13,26 @@ import ghidra.app.decompiler.DecompileOptions;
 import ghidra.app.decompiler.DecompileResults;
 import ghidra.util.exception.DuplicateNameException;
 import ghidra.util.exception.InvalidInputException;
-import ghidra.util.task.TaskMonitor;
-import ghidra.util.Msg;
+import ghidra.util.task.ConsoleTaskMonitor;
+import ghidra.app.cmd.function.ApplyFunctionSignatureCmd;
+import ghidra.program.model.data.DataTypeManager;
+import ghidra.program.model.data.DataType;
+import ghidra.program.model.data.PointerDataType;
+import ghidra.program.model.data.Undefined1DataType;
+import ghidra.app.services.DataTypeManagerService;
+import ghidra.app.util.parser.FunctionSignatureParser;
+import ghidra.program.model.data.FunctionDefinitionDataType;
 import ghidra.program.model.symbol.SourceType;
+import ghidra.program.model.pcode.LocalSymbolMap;
+import ghidra.program.model.pcode.HighFunctionDBUtil;
+import ghidra.program.model.listing.Parameter;
+import ghidra.program.model.listing.Variable;
+import ghidra.program.model.listing.VariableStorage;
 import ghidragpt.ui.GhidraGPTConsole;
 import ghidragpt.service.GPTService;
+import ghidra.util.task.TaskMonitor;
+import ghidra.util.Msg;
+import ghidra.program.model.address.Address;
 
 import java.util.*;
 import java.util.regex.Pattern;
@@ -43,7 +57,7 @@ public class CodeEnhancementService {
     }
     
     /**
-     * Comprehensive code enhancement: renames function and all variables for maximum readability
+     * Comprehensive code enhancement: renames function, variables, sets types, and adds comments
      */
     public EnhancementResult enhanceFunction(Function function, Program program, TaskMonitor monitor) {
         EnhancementResult result = new EnhancementResult();
@@ -51,7 +65,7 @@ public class CodeEnhancementService {
         result.originalFunctionName = function.getName();
         
         try {
-            monitor.setMessage("Analyzing function for code enhancement...");
+            monitor.setMessage("Analyzing function for comprehensive code enhancement...");
             
             // Initialize decompiler
             if (!decompiler.openProgram(program)) {
@@ -72,13 +86,13 @@ public class CodeEnhancementService {
             // Extract variable information
             Map<String, VariableInfo> variableMap = extractVariableInformation(function, highFunction);
             
-            // Generate enhancement prompt
-            String enhancementPrompt = generateEnhancementPrompt(function, decompiledCode, variableMap);
+            // Generate comprehensive enhancement prompt
+            String enhancementPrompt = generateComprehensiveEnhancementPrompt(function, decompiledCode, variableMap);
             
-            monitor.setMessage("Getting AI suggestions for code enhancement...");
+            monitor.setMessage("Getting AI suggestions for comprehensive function rewrite...");
             monitor.setProgress(30);
             
-            // Get AI response with streaming (always enabled for supported providers)
+            // Get AI response with streaming
             String aiResponse;
             try {
                 long startTime = System.currentTimeMillis();
@@ -86,7 +100,7 @@ public class CodeEnhancementService {
                 
                 // Print analysis header using console
                 if (console != null) {
-                    console.printAnalysisHeader("✨ Code Enhancement", function.getName(), 
+                    console.printAnalysisHeader("✨ Comprehensive Function Rewrite", function.getName(), 
                         provider.toString(), gptService.getModel(), enhancementPrompt.length());
                 }
                 
@@ -144,19 +158,19 @@ public class CodeEnhancementService {
             
             monitor.setProgress(70);
             
-            // Parse AI response for both function and variable renames
-            EnhancementSuggestions suggestions = parseEnhancementResponse(aiResponse);
+            // Parse AI response for comprehensive rewrite specification
+            ComprehensiveRewriteSpec rewriteSpec = parseComprehensiveRewriteResponse(aiResponse);
             
-            monitor.setMessage("Applying enhancement changes...");
+            monitor.setMessage("Applying comprehensive function rewrite...");
             monitor.setProgress(80);
             
-            // Apply the enhancement changes in a transaction
-            result = applyEnhancementChanges(function, program, variableMap, suggestions, monitor);
+            // Apply the comprehensive rewrite changes
+            result = applyComprehensiveRewrite(function, program, variableMap, rewriteSpec, monitor);
             
             monitor.setProgress(100);
             
         } catch (Exception e) {
-            String errorMsg = "Error during code enhancement: " + e.getMessage();
+            String errorMsg = "Error during comprehensive function rewrite: " + e.getMessage();
             
             // Provide more specific error messages for common timeout issues
             if (e.getMessage() != null && e.getMessage().toLowerCase().contains("timeout")) {
@@ -165,7 +179,7 @@ public class CodeEnhancementService {
             }
             
             result.errors.add(errorMsg);
-            Msg.error(this, "Code enhancement error", e);
+            Msg.error(this, "Comprehensive function rewrite error", e);
         }
         
         return result;
@@ -234,11 +248,11 @@ public class CodeEnhancementService {
     }
     
     /**
-     * Generate enhancement prompt for AI analysis
+     * Generate comprehensive enhancement prompt for AI analysis
      */
-    private String generateEnhancementPrompt(Function function, String decompiledCode, Map<String, VariableInfo> variables) {
+    private String generateComprehensiveEnhancementPrompt(Function function, String decompiledCode, Map<String, VariableInfo> variables) {
         StringBuilder prompt = new StringBuilder();
-        prompt.append("Analyze this decompiled function and suggest comprehensive improvements for function name, variable names, and data types.\n\n");
+        prompt.append("Analyze this decompiled function and provide a comprehensive rewrite specification to make it as human-readable as possible.\n\n");
         prompt.append("Current function: ").append(function.getName()).append("\n\n");
         prompt.append("Decompiled code:\n").append(decompiledCode).append("\n\n");
         
@@ -300,28 +314,58 @@ public class CodeEnhancementService {
         prompt.append("Analysis Instructions:\n");
         prompt.append("1. Suggest a descriptive function name based on what the function does\n");
         prompt.append("2. Rename variables to reflect their purpose/usage\n");
-        prompt.append("3. For undefined types, suggest more specific types based on usage patterns\n");
-        prompt.append("4. Keep well-named variables (like ControlPc, FunctionEntry) unless you have better names\n");
-        prompt.append("5. Focus on renaming generic names (param_1, local_38, uStack_20, etc.)\n");
-        prompt.append("6. Pay attention to:\n");
+        prompt.append("3. For unclear types, suggest more specific types based on usage patterns\n");
+        prompt.append("4. Suggest a proper function prototype/signature if the current one seems incorrect\n");
+        prompt.append("5. Add helpful comments for complex logic, important operations, or unclear code sections\n");
+        prompt.append("6. Focus on renaming generic names (param_1, local_38, uStack_20, etc.)\n");
+        prompt.append("7. Pay attention to:\n");
         prompt.append("   - Function parameters and their roles\n");
         prompt.append("   - Loop counters, flags, temporary storage\n");
         prompt.append("   - Return values and error codes\n");
         prompt.append("   - Data size patterns (int vs long vs pointer)\n\n");
         
-        prompt.append("Answer strictly in this response format with no extra output:\n");
-        prompt.append("FUNCTION_NAME: descriptive_function_name\n");
-        prompt.append("RENAME: old_variable -> new_variable\n");
-        prompt.append("TYPE_HINT: variable_name -> suggested_type (for unclear types)\n\n");
+        prompt.append("Answer strictly in this JSON format with no extra output:\n");
+        prompt.append("{\n");
+        prompt.append("  \"function_name\": \"descriptive_function_name\",\n");
+        prompt.append("  \"variable_renames\": {\n");
+        prompt.append("    \"old_variable\": \"new_variable\",\n");
+        prompt.append("    ...\n");
+        prompt.append("  },\n");
+        prompt.append("  \"variable_types\": {\n");
+        prompt.append("    \"variable_name\": \"suggested_type\",\n");
+        prompt.append("    ...\n");
+        prompt.append("  },\n");
+        prompt.append("  \"function_prototype\": \"void function_name(type param1, type param2)\",\n");
+        prompt.append("  \"comments\": {\n");
+        prompt.append("    \"address\": \"comment text\",\n");
+        prompt.append("    ...\n");
+        prompt.append("  }\n");
+        prompt.append("}\n\n");
         
         prompt.append("Examples:\n");
-        prompt.append("FUNCTION_NAME: handle_security_failure\n");
-        prompt.append("RENAME: param_1 → violation_address\n");
-        prompt.append("RENAME: local_38 → image_base_buffer\n");
-        prompt.append("RENAME: uStack_20 → stack_parameter\n");
-        prompt.append("TYPE_HINT: violation_address → PVOID\n");
-        prompt.append("TYPE_HINT: image_base_buffer → DWORD64*\n");
-        prompt.append("Note: Keep well-named variables like 'ControlPc' and 'FunctionEntry' unless you have significantly better names.\n");
+        prompt.append("{\n");
+        prompt.append("  \"function_name\": \"handle_security_failure\",\n");
+        prompt.append("  \"variable_renames\": {\n");
+        prompt.append("    \"param_1\": \"violation_address\",\n");
+        prompt.append("    \"local_38\": \"image_base_buffer\",\n");
+        prompt.append("    \"uStack_20\": \"stack_parameter\"\n");
+        prompt.append("  },\n");
+        prompt.append("  \"variable_types\": {\n");
+        prompt.append("    \"violation_address\": \"PVOID\",\n");
+        prompt.append("    \"image_base_buffer\": \"DWORD64*\"\n");
+        prompt.append("  },\n");
+        prompt.append("  \"function_prototype\": \"NTSTATUS handle_security_failure(PVOID violation_address, ULONG violation_code)\",\n");
+        prompt.append("  \"comments\": {\n");
+        prompt.append("    \"0x1400010a0\": \"Check if violation address is valid\",\n");
+        prompt.append("    \"0x1400010c5\": \"Log security event before returning\"\n");
+        prompt.append("  }\n");
+        prompt.append("}\n\n");
+        
+        prompt.append("Notes:\n");
+        prompt.append("- Keep well-named variables like 'ControlPc' and 'FunctionEntry' unless you have significantly better names.\n");
+        prompt.append("- For addresses in comments, use hex format like '0x1400010a0'\n");
+        prompt.append("- Only include fields that need changes - omit empty objects\n");
+        prompt.append("- Function prototype should be a complete C function signature\n");
         
         return prompt.toString();
     }
@@ -334,6 +378,112 @@ public class CodeEnhancementService {
         EnhancementSuggestions suggestions = new EnhancementSuggestions();
         parseTextResponse(response, suggestions);
         return suggestions;
+    }
+    
+    /**
+     * Holds enhancement suggestions from AI
+     */
+    private static class EnhancementSuggestions {
+        String functionName;
+        Map<String, String> variableRenames = new HashMap<>();
+        Map<String, String> typeHints = new HashMap<>();
+    }
+    
+    /**
+     * Parses comprehensive rewrite response from AI (JSON format)
+     */
+    private ComprehensiveRewriteSpec parseComprehensiveRewriteResponse(String response) {
+        ComprehensiveRewriteSpec spec = new ComprehensiveRewriteSpec();
+        
+        try {
+            // Extract JSON from response (AI might add extra text)
+            int jsonStart = response.indexOf("{");
+            int jsonEnd = response.lastIndexOf("}") + 1;
+            
+            if (jsonStart == -1 || jsonEnd == -1) {
+                // Fallback to old parsing if no JSON found
+                Msg.warn(this, "No JSON found in response, falling back to text parsing");
+                EnhancementSuggestions fallback = parseEnhancementResponse(response);
+                spec.functionName = fallback.functionName;
+                spec.variableRenames = fallback.variableRenames;
+                spec.variableTypes = fallback.typeHints;
+                return spec;
+            }
+            
+            String jsonStr = response.substring(jsonStart, jsonEnd);
+            
+            // Simple JSON parsing (since we don't have a full JSON library)
+            spec = parseSimpleJson(jsonStr);
+            
+        } catch (Exception e) {
+            Msg.error(this, "Failed to parse comprehensive rewrite response: " + e.getMessage());
+            // Fallback to old parsing
+            EnhancementSuggestions fallback = parseEnhancementResponse(response);
+            spec.functionName = fallback.functionName;
+            spec.variableRenames = fallback.variableRenames;
+            spec.variableTypes = fallback.typeHints;
+        }
+        
+        return spec;
+    }
+    
+    /**
+     * Simple JSON parser for our specific format
+     */
+    private ComprehensiveRewriteSpec parseSimpleJson(String jsonStr) {
+        ComprehensiveRewriteSpec spec = new ComprehensiveRewriteSpec();
+        
+        // Remove whitespace and newlines
+        jsonStr = jsonStr.replaceAll("\\s+", " ");
+        
+        // Extract function_name
+        Pattern funcPattern = Pattern.compile("\"function_name\"\\s*:\\s*\"([^\"]+)\"");
+        Matcher funcMatcher = funcPattern.matcher(jsonStr);
+        if (funcMatcher.find()) {
+            spec.functionName = funcMatcher.group(1);
+        }
+        
+        // Extract function_prototype
+        Pattern protoPattern = Pattern.compile("\"function_prototype\"\\s*:\\s*\"([^\"]+)\"");
+        Matcher protoMatcher = protoPattern.matcher(jsonStr);
+        if (protoMatcher.find()) {
+            spec.functionPrototype = protoMatcher.group(1);
+        }
+        
+        // Extract variable_renames object
+        spec.variableRenames = extractJsonObject(jsonStr, "variable_renames");
+        
+        // Extract variable_types object
+        spec.variableTypes = extractJsonObject(jsonStr, "variable_types");
+        
+        // Extract comments object
+        spec.comments = extractJsonObject(jsonStr, "comments");
+        
+        return spec;
+    }
+    
+    /**
+     * Extract a JSON object from the string
+     */
+    private Map<String, String> extractJsonObject(String jsonStr, String objectName) {
+        Map<String, String> result = new HashMap<>();
+        
+        String pattern = "\"" + objectName + "\"\\s*:\\s*\\{([^}]*)\\}";
+        Pattern objPattern = Pattern.compile(pattern);
+        Matcher objMatcher = objPattern.matcher(jsonStr);
+        
+        if (objMatcher.find()) {
+            String objContent = objMatcher.group(1);
+            // Simple key-value extraction
+            Pattern kvPattern = Pattern.compile("\"([^\"]+)\"\\s*:\\s*\"([^\"]+)\"");
+            Matcher kvMatcher = kvPattern.matcher(objContent);
+            
+            while (kvMatcher.find()) {
+                result.put(kvMatcher.group(1), kvMatcher.group(2));
+            }
+        }
+        
+        return result;
     }
     
     /**
@@ -377,6 +527,376 @@ public class CodeEnhancementService {
         }
     }
     
+    /**
+     * Applies comprehensive rewrite changes using proper Ghidra APIs
+     */
+    private EnhancementResult applyComprehensiveRewrite(Function function, Program program, 
+            Map<String, VariableInfo> variableMap, ComprehensiveRewriteSpec spec, TaskMonitor monitor) {
+        
+        EnhancementResult result = new EnhancementResult();
+        result.functionName = function.getName();
+        result.originalFunctionName = function.getName();
+        
+        int transactionID = program.startTransaction("Comprehensive Function Rewrite: " + function.getName());
+        boolean success = false;
+        
+        try {
+            // 1. Apply function rename first
+            if (spec.functionName != null && !spec.functionName.equals(function.getName())) {
+                try {
+                    function.setName(spec.functionName, SourceType.USER_DEFINED);
+                    result.newFunctionName = spec.functionName;
+                    result.functionRenamed = true;
+                    Msg.info(this, "Renamed function: " + result.originalFunctionName + " -> " + spec.functionName);
+                } catch (DuplicateNameException | InvalidInputException e) {
+                    result.errors.add("Failed to rename function to " + spec.functionName + ": " + e.getMessage());
+                }
+            }
+            
+            // 2. Apply function prototype if specified
+            if (spec.functionPrototype != null && !spec.functionPrototype.trim().isEmpty()) {
+                try {
+                    applyFunctionPrototype(function, program, spec.functionPrototype);
+                    result.message = "Function prototype updated";
+                    Msg.info(this, "Updated function prototype: " + spec.functionPrototype);
+                } catch (Exception e) {
+                    result.errors.add("Failed to update function prototype: " + e.getMessage());
+                    Msg.error(this, "Prototype update failed", e);
+                }
+            }
+            
+            // 3. Apply variable renames using HighFunctionDBUtil
+            int renameCount = 0;
+            for (Map.Entry<String, String> rename : spec.variableRenames.entrySet()) {
+                String oldName = rename.getKey();
+                String newName = rename.getValue();
+                
+                if (applyVariableRename(function, program, oldName, newName)) {
+                    renameCount++;
+                    result.variableRenames.put(oldName, newName);
+                    Msg.info(this, "Renamed variable: " + oldName + " -> " + newName);
+                } else {
+                    result.errors.add("Failed to rename variable: " + oldName);
+                }
+            }
+            
+            // 4. Apply variable type changes
+            int typeCount = 0;
+            for (Map.Entry<String, String> typeChange : spec.variableTypes.entrySet()) {
+                String varName = typeChange.getKey();
+                String newType = typeChange.getValue();
+                
+                if (applyVariableTypeChange(function, program, varName, newType)) {
+                    typeCount++;
+                    result.typeUpdates.put(varName, newType);
+                    Msg.info(this, "Changed type for " + varName + " to " + newType);
+                } else {
+                    result.errors.add("Failed to change type for variable: " + varName);
+                }
+            }
+            
+            // 5. Apply comments
+            int commentCount = 0;
+            for (Map.Entry<String, String> comment : spec.comments.entrySet()) {
+                String addressStr = comment.getKey();
+                String commentText = comment.getValue();
+                
+                if (applyComment(program, addressStr, commentText)) {
+                    commentCount++;
+                    Msg.info(this, "Added comment at " + addressStr + ": " + commentText);
+                } else {
+                    result.errors.add("Failed to add comment at: " + addressStr);
+                }
+            }
+            
+            success = true;
+            
+            // Build result message
+            StringBuilder message = new StringBuilder();
+            if (result.functionRenamed) {
+                message.append("Function renamed: ").append(result.originalFunctionName)
+                       .append(" → ").append(result.newFunctionName).append("\n");
+            }
+            
+            if (renameCount > 0) {
+                message.append("Successfully renamed ").append(renameCount).append(" variable(s)\n");
+            }
+            
+            if (typeCount > 0) {
+                message.append("Successfully updated types for ").append(typeCount).append(" variable(s)\n");
+            }
+            
+            if (commentCount > 0) {
+                message.append("Successfully added ").append(commentCount).append(" comment(s)\n");
+            }
+            
+            if (spec.functionPrototype != null) {
+                message.append("Function prototype updated\n");
+            }
+            
+            if (!result.functionRenamed && renameCount == 0 && typeCount == 0 && commentCount == 0 && spec.functionPrototype == null) {
+                message.append("No changes were applied");
+            }
+            
+            result.message = message.toString();
+            
+        } finally {
+            program.endTransaction(transactionID, success);
+        }
+        
+        return result;
+    }
+    
+    /**
+     * Apply function prototype using proper Ghidra APIs
+     */
+    private void applyFunctionPrototype(Function function, Program program, String prototype) throws Exception {
+        DataTypeManager dtm = program.getDataTypeManager();
+        
+        // Parse the function signature
+        FunctionSignatureParser parser = new FunctionSignatureParser(dtm, null);
+        FunctionDefinitionDataType sig = parser.parse(null, prototype);
+        
+        if (sig == null) {
+            throw new Exception("Failed to parse function prototype: " + prototype);
+        }
+        
+        // Apply the signature
+        ApplyFunctionSignatureCmd cmd = new ApplyFunctionSignatureCmd(
+            function.getEntryPoint(), sig, SourceType.USER_DEFINED);
+        
+        if (!cmd.applyTo(program, new ConsoleTaskMonitor())) {
+            throw new Exception("Failed to apply function signature: " + cmd.getStatusMsg());
+        }
+    }
+    
+    /**
+     * Apply variable rename using HighFunctionDBUtil
+     */
+    private boolean applyVariableRename(Function function, Program program, String oldName, String newName) {
+        try {
+            // Decompile to get HighFunction
+            DecompileResults results = decompiler.decompileFunction(function, 30, new ConsoleTaskMonitor());
+            if (results == null || !results.decompileCompleted()) {
+                return false;
+            }
+            
+            HighFunction highFunction = results.getHighFunction();
+            if (highFunction == null) {
+                return false;
+            }
+            
+            // Find the symbol
+            HighSymbol symbol = findSymbolByName(highFunction, oldName);
+            if (symbol == null) {
+                return false;
+            }
+            
+            // Check if rename is needed
+            if (oldName.equals(newName)) {
+                return true; // Already has the desired name
+            }
+            
+            // Apply the rename
+            boolean commitRequired = checkFullCommit(symbol, highFunction);
+            
+            int tx = program.startTransaction("Rename variable: " + oldName + " -> " + newName);
+            try {
+                if (commitRequired) {
+                    HighFunctionDBUtil.commitParamsToDatabase(highFunction, false,
+                        HighFunctionDBUtil.ReturnCommitOption.NO_COMMIT, function.getSignatureSource());
+                }
+                
+                HighFunctionDBUtil.updateDBVariable(symbol, newName, null, SourceType.USER_DEFINED);
+                return true;
+            } finally {
+                program.endTransaction(tx, true);
+            }
+            
+        } catch (Exception e) {
+            Msg.error(this, "Error renaming variable " + oldName, e);
+            return false;
+        }
+    }
+    
+    /**
+     * Apply variable type change using HighFunctionDBUtil
+     */
+    private boolean applyVariableTypeChange(Function function, Program program, String varName, String newType) {
+        try {
+            // Decompile to get HighFunction
+            DecompileResults results = decompiler.decompileFunction(function, 30, new ConsoleTaskMonitor());
+            if (results == null || !results.decompileCompleted()) {
+                return false;
+            }
+            
+            HighFunction highFunction = results.getHighFunction();
+            if (highFunction == null) {
+                return false;
+            }
+            
+            // Find the symbol
+            HighSymbol symbol = findSymbolByName(highFunction, varName);
+            if (symbol == null) {
+                return false;
+            }
+            
+            // Resolve the data type
+            DataTypeManager dtm = program.getDataTypeManager();
+            DataType dataType = resolveDataType(dtm, newType);
+            if (dataType == null) {
+                Msg.warn(this, "Could not resolve data type: " + newType);
+                return false;
+            }
+            
+            // Apply the type change
+            int tx = program.startTransaction("Change variable type: " + varName + " -> " + newType);
+            try {
+                HighFunctionDBUtil.updateDBVariable(symbol, symbol.getName(), dataType, SourceType.USER_DEFINED);
+                return true;
+            } finally {
+                program.endTransaction(tx, true);
+            }
+            
+        } catch (Exception e) {
+            Msg.error(this, "Error changing type for variable " + varName, e);
+            return false;
+        }
+    }
+    
+    /**
+     * Apply comment at address
+     */
+    private boolean applyComment(Program program, String addressStr, String commentText) {
+        try {
+            Address addr = program.getAddressFactory().getAddress(addressStr);
+            program.getListing().setComment(addr, CodeUnit.PRE_COMMENT, commentText);
+            return true;
+        } catch (Exception e) {
+            Msg.error(this, "Error adding comment at " + addressStr, e);
+            return false;
+        }
+    }
+    
+    /**
+     * Find a symbol by name in the high function
+     */
+    private HighSymbol findSymbolByName(HighFunction highFunction, String name) {
+        Iterator<HighSymbol> symbols = highFunction.getLocalSymbolMap().getSymbols();
+        while (symbols.hasNext()) {
+            HighSymbol symbol = symbols.next();
+            if (symbol.getName().equals(name)) {
+                return symbol;
+            }
+        }
+        return null;
+    }
+    
+    /**
+     * Check if full commit is required (copied from GhidraMCP)
+     */
+    private static boolean checkFullCommit(HighSymbol highSymbol, HighFunction hfunction) {
+        if (highSymbol != null && !highSymbol.isParameter()) {
+            return false;
+        }
+        Function function = hfunction.getFunction();
+        Parameter[] parameters = function.getParameters();
+        LocalSymbolMap localSymbolMap = hfunction.getLocalSymbolMap();
+        int numParams = localSymbolMap.getNumParams();
+        if (numParams != parameters.length) {
+            return true;
+        }
+
+        for (int i = 0; i < numParams; i++) {
+            HighSymbol param = localSymbolMap.getParamSymbol(i);
+            if (param.getCategoryIndex() != i) {
+                return true;
+            }
+            VariableStorage storage = param.getStorage();
+            if (0 != storage.compareTo(parameters[i].getVariableStorage())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    
+    /**
+     * Resolve data type from string (similar to GhidraMCP implementation)
+     */
+    private DataType resolveDataType(DataTypeManager dtm, String typeName) {
+        // First try to find exact match
+        DataType dataType = findDataTypeByNameInAllCategories(dtm, typeName);
+        if (dataType != null) {
+            return dataType;
+        }
+
+        // Check for Windows-style pointer types (PXXX)
+        if (typeName.startsWith("P") && typeName.length() > 1) {
+            String baseTypeName = typeName.substring(1);
+            DataType baseType = findDataTypeByNameInAllCategories(dtm, baseTypeName);
+            if (baseType != null) {
+                return new PointerDataType(baseType);
+            }
+            return new PointerDataType(dtm.getDataType("/void"));
+        }
+
+        // Handle common built-in types
+        switch (typeName.toLowerCase()) {
+            case "int":
+            case "long":
+                return dtm.getDataType("/int");
+            case "uint":
+            case "unsigned int":
+            case "unsigned long":
+            case "dword":
+                return dtm.getDataType("/uint");
+            case "short":
+                return dtm.getDataType("/short");
+            case "ushort":
+            case "unsigned short":
+            case "word":
+                return dtm.getDataType("/ushort");
+            case "char":
+            case "byte":
+                return dtm.getDataType("/char");
+            case "uchar":
+            case "unsigned char":
+                return dtm.getDataType("/uchar");
+            case "longlong":
+            case "__int64":
+                return dtm.getDataType("/longlong");
+            case "ulonglong":
+            case "unsigned __int64":
+                return dtm.getDataType("/ulonglong");
+            case "bool":
+            case "boolean":
+                return dtm.getDataType("/bool");
+            case "void":
+                return dtm.getDataType("/void");
+            default:
+                DataType directType = dtm.getDataType("/" + typeName);
+                if (directType != null) {
+                    return directType;
+                }
+                return dtm.getDataType("/int"); // fallback
+        }
+    }
+    
+    /**
+     * Find data type by name in all categories
+     */
+    private DataType findDataTypeByNameInAllCategories(DataTypeManager dtm, String typeName) {
+        Iterator<DataType> allTypes = dtm.getAllDataTypes();
+        while (allTypes.hasNext()) {
+            DataType dt = allTypes.next();
+            if (dt.getName().equals(typeName) || dt.getName().equalsIgnoreCase(typeName)) {
+                return dt;
+            }
+        }
+        return null;
+    }
+
     /**
      * Applies all enhancement changes in a single transaction
      */
@@ -531,12 +1051,14 @@ public class CodeEnhancementService {
     }
     
     /**
-     * Holds enhancement suggestions from AI
+     * Holds comprehensive rewrite suggestions from AI
      */
-    private static class EnhancementSuggestions {
+    private static class ComprehensiveRewriteSpec {
         String functionName;
         Map<String, String> variableRenames = new HashMap<>();
-        Map<String, String> typeHints = new HashMap<>();
+        Map<String, String> variableTypes = new HashMap<>();
+        String functionPrototype;
+        Map<String, String> comments = new HashMap<>();
     }
     
     /**
