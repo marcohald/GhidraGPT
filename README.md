@@ -42,7 +42,7 @@ A powerful Ghidra plugin that integrates Large Language Models (LLMs) directly i
 
 2. **Build the Plugin**:
    ```bash
-   GHIDRA_INSTALL_DIR=/path/to/ghidra mvn package
+   GHIDRA_INSTALL_DIR=/path/to/ghidra mvn clean package
    ```
    The built extension will be at `target/GhidraGPT-x.y.z.zip`
 
